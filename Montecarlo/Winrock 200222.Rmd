@@ -1,0 +1,119 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+This R Notebook estimates the uncertanty using R, based on the example from Winrock. 
+
+#Winrock
+https://www.winrock.org/wp-content/uploads/2018/03/UncertaintyReport-12.26.17.pdf
+Activity data 
+Deforestation 50,000 hectar
+Standard error 3,000 hectar
+PDF Normal 
+#Lager tabell
+
+#Emission factor 
+##Annex 1: Simplified example of application of the Monte Carlo approach
+For activity data, the source of uncertainty is the error in the mapping of land use change, specifically change from  forests to other land uses. To estimate this error, the analysts apply the approach presented in Olofsson et al (2013) The deforested area was estimated to be 50,000 hectares per year with a standard error of 3,000 hectares. The Olofsson approach assumes a normal probability distribution, and the analyst runs ten thousand Monte Carlo.
+
+The deforested area = 50,000
+standard error = 3000
+
+In the example winrock is referring to the standard error. Standard error of the mean has the following formula. 
+
+SE = SD / sqrt(N)
+
+However,standard deviation can be obtained from the standard error of a mean (SEM) by multiplying by the square root of the sample size:
+
+SD = sqrt(N) * SE
+
+Unfortunately the Winrock example don´t include the number of observations. And the input into the random generator for r is: The number of random numbers, mean, and standard deviation (SD). However, when comparing the simulation from R with the result in Winrock it looks like the input is SE. For the simulation in R, the function rnorm is used to generate 10,000 different simulations with a mean of 50,000 and a standard deviation of 3,000. 
+
+```{r}
+n <- 10000
+AD <- (rnorm(n,50000, 3000))
+hist(AD)
+AD <- data.frame(AD)
+```
+In the example 150 plots was sampled using software the distribution was identified to be lognorm. With the following parameters: (Mean 3.8967 and SD 0.15607). The tutorial says that there should not be any plots wiht volume higher than 90 tC ha-1. To simulate this properly in R, the function rlnormTrunc from the package EnvStats is used.
+
+AB(rlnorm(10000,3.8967, 0.15607))
+Where:
+BBC = Carbon in belowground biomass, tC ha-1
+ABC = Carbon in aboveground biomass, tC ha-1
+RSR = root:shoot ratio, dimensionless
+https://www.rdocumentation.org/packages/EnvStats/versions/2.3.1/topics/LognormalTrunc
+
+```{r}
+mean((rlnorm(n,3.8967, 0.15607)))
+sd((rlnorm(n,3.8967, 0.15607)))  
+ABC <- rlnorm(n, 3.8967, 0.15607)
+
+ABC <- EnvStats::rlnormTrunc(n,3.8967, 0.15607, min = 0, max = 90)
+hist(ABC)
+
+
+#EnvStats::rlnormTrunc(10000, meanlog = 3.8967, sdlog = 0.15607, min = 0, max = Inf)
+
+```
+#the root:shoot ratio
+From: Critical analysis of root : shoot ratios in terrestrial biomes
+Mokay 2006
+Median: 0.205
+SE: 0.036
+n: 4
+SE = SD / sqrt(n) * 1.253 
+SD = SE * sqrt(n) * 1.253 
+The RS is a median with only 4 observation. The formula for standard error of the median is different than the formula for mean. This site recommend to use a factor of 1.253: http://davidmlane.com/hyperstat/A106993.html.
+
+```{r}
+RSR <- rnorm(n, 0.205, 0.036 * sqrt(4) * 1.253)
+RSR <- EnvStats::rnormTrunc(n,0.205, 0.036 * sqrt(4) * 1.253, min = 0, max = Inf)
+hist(RSR)
+0.036 * sqrt(4)
+hist(rnorm(n, 0.205, 0.036 * sqrt(4) * 1.253))
+RSR <- rnorm(n, 0.205, 0.036 * sqrt(4) * 1.253)
+BBC <- ABC * RSR
+```
+Where:
+EF = Tonnes of carbon dioxide in above and belowground biomass, t CO2 ha-1
+BBC = Carbon in belowground biomass, tC ha-1
+ABC = Carbon in aboveground biomass, tC ha-1
+44/12 = Conversion factor of carbon to carbon dioxide, dimensionless
+```{r}
+EF = (ABC + BBC) * 44 / 12
+```
+Where:
+Total emission = Tonnes of CO2 emitted, tCO2 year-1
+EF = Emission factor; Tonnes of carbon dioxide in above and belowground biomass, t CO2 ha-1
+AD = Activity data; area of deforestation, hectares year-1
+Bootstrap, based on an example from Forest Analytics with R. (Page 85-86)
+```{r}
+library(boot)
+boot.mean <- name <- function(x, index) {
+  mean(x[index])
+}
+boot.median <- name <- function(x, index) {
+  median(x[index])
+}
+
+Total_emission = EF * AD$AD
+hist(Total_emission, breaks = 100)
+
+median(Total_emission)
+quantile(Total_emission)
+
+emission.SRS.boot <- boot(Total_emission, boot.median, R = 1999)
+emission.SRS.boot
+plot(emission.SRS.boot)
+boot.ci_em <- boot.ci(emission.SRS.boot, conf = 0.975 , type = "norm")
+
+median(Total_emission)
+(1 / 2 * (boot.ci_em$normal[3] - boot.ci_em$normal[2])) / median(Total_emission) * 100
+```
+
+
+
+
+
+
