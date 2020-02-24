@@ -1,2 +1,2 @@
-# forest_inventory
+# Forest inventory
 Forest economics
